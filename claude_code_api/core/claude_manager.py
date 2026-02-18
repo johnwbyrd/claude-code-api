@@ -94,16 +94,28 @@ class ClaudeProcess:
             logger.info(f"Starting Claude from directory: {src_dir}")
             logger.info(f"Command: {' '.join(safe_cmd)}")
 
-            # Start process asynchronously
+            # Start process asynchronously.
+            # Strip CLAUDECODE env var so the child process does not
+            # think it is running inside another Claude Code session.
+            child_env = {
+                k: v for k, v in os.environ.items() if k != "CLAUDECODE"
+            }
             self.process = await asyncio.create_subprocess_exec(
                 *cmd,
                 cwd=src_dir,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 stdin=asyncio.subprocess.PIPE,
+                env=child_env,
             )
 
             self.is_running = True
+
+            # Close stdin since we pass the prompt via the -p flag.
+            # Leaving it open causes the CLI to block waiting for input.
+            if self.process.stdin:
+                self.process.stdin.close()
+                await self.process.stdin.wait_closed()
 
             # Start background tasks to read output
             self._output_task = asyncio.create_task(self._read_output())
